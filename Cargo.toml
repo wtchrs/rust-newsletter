@@ -2,6 +2,15 @@
 name = "newsletter"
 version = "0.1.0"
 edition = "2021"
+authors = ["wtchrs <wtchr_@hotmail.com>"]
+
+[lib]
+name = "newsletter_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "newsletter"
+path = "src/main.rs"
 
 [dependencies]
 actix-web = "4"
