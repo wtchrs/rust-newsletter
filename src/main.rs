@@ -1,4 +1,4 @@
-use newsletter_lib::run;
+use newsletter_lib::startup::run;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
