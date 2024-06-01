@@ -2,6 +2,7 @@ use tracing::subscriber::set_global_default;
 use tracing::Subscriber;
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_log::LogTracer;
+use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
@@ -11,13 +12,17 @@ use tracing_subscriber::{EnvFilter, Registry};
 /// # Parameters
 /// - `name`: The name of the service.
 /// - `env_filter`: The default filter used to determine the verbosity of the logs.
+/// - `sink`: The sink to write the logs to.
 ///
 /// # Returns
 /// The tracing subscriber.
-pub fn get_subscriber(name: String, env_filter: String) -> impl Subscriber + Send + Sync {
+pub fn get_subscriber<T>(name: String, env_filter: String, sink: T) -> impl Subscriber + Send + Sync
+where
+    T: for<'a> MakeWriter<'a> + Send + Sync + 'static,
+{
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter));
-    let formatting_layer = BunyanFormattingLayer::new(name, std::io::stdout);
+    let formatting_layer = BunyanFormattingLayer::new(name, sink);
     Registry::default()
         .with(env_filter)
         .with(JsonStorageLayer)
