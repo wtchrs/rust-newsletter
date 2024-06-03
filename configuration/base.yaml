@@ -1,6 +1,7 @@
 # Edit with your own configuration
 
-application_port: 8080
+application:
+  port: 8080
 
 database:
   host: localhost

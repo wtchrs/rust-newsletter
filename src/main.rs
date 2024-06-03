@@ -12,10 +12,14 @@ async fn main() -> std::io::Result<()> {
 
     let configurations = get_configuration().expect("Failed to read configuration.");
     let connection_pool =
-        PgPool::connect(configurations.database.connection_string().expose_secret())
-            .await
+        PgPool::connect_lazy(configurations.database.connection_string().expose_secret())
             .expect("Failed to connect to Postgres.");
-    let address = format!("127.0.0.1:{}", configurations.application_port);
+
+    let address = format!(
+        "{}:{}",
+        configurations.application.host, configurations.application.port
+    );
+
     let listener = TcpListener::bind(address)?;
     run(listener, connection_pool)?.await
 }
