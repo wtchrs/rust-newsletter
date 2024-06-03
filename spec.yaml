@@ -1,22 +1,48 @@
-name: rust-newsletter
+# DigitalOcean App Platform Spec File
 
+name: rust-newsletter
 region: syd1
 
 services:
   - name: rust-newsletter
     dockerfile_path: Dockerfile
     source_dir: .
+
     github:
       branch: main
       deploy_on_push: true
       repo: wtchrs/rust-newsletter
+
     health_check:
       http_path: /health_check
+
     http_port: 8080
     instance_count: 1
     instance_size_slug: basic-xxs
+
     routes:
       - path: /
+
+    envs:
+      - key: APP_DATABASE__USERNAME
+        scope: RUN_TIME
+        value: ${newsletter.USERNAME}
+
+      - key: APP_DATABASE__PASSWORD
+        scope: RUN_TIME
+        value: ${newsletter.PASSWORD}
+
+      - key: APP_DATABASE__HOST
+        scope: RUN_TIME
+        value: ${newsletter.HOST}
+
+      - key: APP_DATABASE__PORT
+        scope: RUN_TIME
+        value: ${newsletter.PORT}
+
+      - key: APP_DATABASE__DATABASE_name
+        scope: RUN_TIME
+        value: ${newsletter.DATABASE}
 
 databases:
   - engine: PG
