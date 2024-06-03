@@ -2,7 +2,7 @@ use newsletter_lib::configuration::{get_configuration, DatabaseSettings};
 use newsletter_lib::startup::run;
 use newsletter_lib::telemetry::{get_subscriber, init_subscriber};
 use once_cell::sync::Lazy;
-use secrecy::ExposeSecret;
+use sqlx::postgres::PgConnectOptions;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::net::TcpListener;
 use uuid::Uuid;
@@ -28,7 +28,7 @@ pub struct TestApp {
 
 impl Drop for TestApp {
     fn drop(&mut self) {
-        let connection_string = self.database.connection_string_without_db();
+        let connect_options = self.database.without_db();
         let database_name = self.database.database_name.clone();
         let connection_pool = self.connection_pool.clone();
 
@@ -40,7 +40,7 @@ impl Drop for TestApp {
 
             runtime.block_on(async {
                 connection_pool.close().await;
-                database_clean(&connection_string.expose_secret(), &database_name).await;
+                database_clean(connect_options, &database_name).await;
             });
         });
     }
@@ -67,15 +67,14 @@ pub async fn spawn_app() -> TestApp {
 }
 
 async fn database_configure(db_settings: &DatabaseSettings) -> PgPool {
-    let mut connection =
-        PgConnection::connect(&db_settings.connection_string_without_db().expose_secret())
-            .await
-            .expect("Failed to connect to Postgres.");
+    let mut connection = PgConnection::connect_with(&db_settings.without_db())
+        .await
+        .expect("Failed to connect to Postgres.");
     connection
         .execute(format!(r#"CREATE DATABASE "{}";"#, db_settings.database_name).as_str())
         .await
         .expect("Failed to create database.");
-    let connection_pool = PgPool::connect(&db_settings.connection_string().expose_secret())
+    let connection_pool = PgPool::connect_with(db_settings.with_db())
         .await
         .expect("Failed to connect to Postgres.");
     sqlx::migrate!("./migrations")
@@ -86,8 +85,8 @@ async fn database_configure(db_settings: &DatabaseSettings) -> PgPool {
     connection_pool
 }
 
-async fn database_clean(connection_string: &str, database_name: &str) {
-    let mut connection = PgConnection::connect(connection_string)
+async fn database_clean(connect_options: PgConnectOptions, database_name: &str) {
+    let mut connection = PgConnection::connect_with(&connect_options)
         .await
         .expect("Failed to connect to Postgres.");
     connection
