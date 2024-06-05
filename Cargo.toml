@@ -44,4 +44,8 @@ features = [
 ]
 
 [dev-dependencies]
+fake = "2"
+quickcheck = "1"
+quickcheck_macros = "1"
+rand = "0.8"
 reqwest = "0.12"
