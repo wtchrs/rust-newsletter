@@ -1,3 +1,5 @@
+use crate::domain::SubscriberName;
+use crate::domain::{NewSubscriber, SubscriberEmail};
 use actix_web::{web, HttpResponse};
 use chrono::Utc;
 use sqlx::PgPool;
@@ -9,19 +11,30 @@ pub struct FormData {
     name: String,
 }
 
+impl TryInto<NewSubscriber> for FormData {
+    type Error = String;
+
+    fn try_into(self) -> Result<NewSubscriber, Self::Error> {
+        let email = SubscriberEmail::parse(self.email)?;
+        let name = SubscriberName::parse(self.name)?;
+        Ok(NewSubscriber { email, name })
+    }
+}
+
 #[tracing::instrument(
     name = "Adding a new subscriber",
-    skip(form, connection_pool),
-    fields(
-        email = %form.email,
-        name = %form.name
-    )
+    skip(connection_pool, form),
+    fields(email = %form.email, name = %form.name)
 )]
 pub async fn subscribe(
-    form: web::Form<FormData>,
     connection_pool: web::Data<PgPool>,
+    form: web::Form<FormData>,
 ) -> HttpResponse {
-    match insert_subscriber(&form, &connection_pool).await {
+    let new_subscriber = match form.0.try_into() {
+        Ok(value) => value,
+        Err(_) => return HttpResponse::BadRequest().finish(),
+    };
+    match insert_subscriber(&connection_pool, &new_subscriber).await {
         Ok(_) => HttpResponse::Ok().finish(),
         Err(_) => HttpResponse::InternalServerError().finish(),
     }
@@ -29,17 +42,20 @@ pub async fn subscribe(
 
 #[tracing::instrument(
     name = "Saving new subscriber details in the database",
-    skip(form, connection_pool)
+    skip(connection_pool, new_subscriber)
 )]
-async fn insert_subscriber(form: &FormData, connection_pool: &PgPool) -> Result<(), sqlx::Error> {
+async fn insert_subscriber(
+    connection_pool: &PgPool,
+    new_subscriber: &NewSubscriber,
+) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at)
         VALUES ($1, $2, $3, $4)
         "#,
         Uuid::new_v4(),
-        form.email,
-        form.name,
+        new_subscriber.email.as_ref(),
+        new_subscriber.name.as_ref(),
         Utc::now()
     )
     .execute(connection_pool)
