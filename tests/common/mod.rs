@@ -61,10 +61,12 @@ pub async fn spawn_app() -> TestApp {
         .email_client
         .sender()
         .expect("Invalid sender email.");
+    let timeout = configurations.email_client.timeout();
     let email_client = newsletter_lib::email_client::EmailClient::new(
         configurations.email_client.base_url,
         sender_email,
         configurations.email_client.authorization_token,
+        timeout,
     );
 
     let server =
