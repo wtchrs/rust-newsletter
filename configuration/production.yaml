@@ -5,3 +5,7 @@ application:
 
 database:
   require_ssl: true
+
+email_client:
+  base_url: https://api.postmarkapp.com
+  # `sender_email` and `authorization_token` should be set as environment variables.

@@ -53,10 +53,22 @@ pub async fn spawn_app() -> TestApp {
     let port = listener.local_addr().unwrap().port();
 
     let mut configurations = get_configuration().expect("Failed to read configuration.");
+
     configurations.database.database_name = Uuid::new_v4().to_string();
     let connection_pool = database_configure(&configurations.database).await;
 
-    let server = run(listener, connection_pool.clone()).expect("Failed to bind address");
+    let sender_email = configurations
+        .email_client
+        .sender()
+        .expect("Invalid sender email.");
+    let email_client = newsletter_lib::email_client::EmailClient::new(
+        configurations.email_client.base_url,
+        sender_email,
+        configurations.email_client.authorization_token,
+    );
+
+    let server =
+        run(listener, connection_pool.clone(), email_client).expect("Failed to bind address");
     tokio::spawn(server);
 
     TestApp {
