@@ -1,6 +1,4 @@
-mod common;
-
-use common::spawn_app;
+use crate::helpers::spawn_app;
 use sqlx::query;
 
 /// This test is responsible for testing the /subscription endpoint.

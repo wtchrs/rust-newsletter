@@ -1,6 +1,4 @@
-mod common;
-
-use common::spawn_app;
+use crate::helpers::spawn_app;
 
 /// This test module is responsible for testing the /health_check endpoint.
 /// It will spawn our application and then send a GET request to the /health_check endpoint.
