@@ -1,10 +1,10 @@
+use actix_web::web;
 use newsletter_lib::configuration::{get_configuration, DatabaseSettings};
-use newsletter_lib::startup::run;
+use newsletter_lib::startup::Application;
 use newsletter_lib::telemetry::{get_subscriber, init_subscriber};
 use once_cell::sync::Lazy;
 use sqlx::postgres::PgConnectOptions;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
-use std::net::TcpListener;
 use uuid::Uuid;
 
 static TRACING: Lazy<()> = Lazy::new(|| {
@@ -22,8 +22,20 @@ static TRACING: Lazy<()> = Lazy::new(|| {
 
 pub struct TestApp {
     pub address: String,
-    pub connection_pool: PgPool,
+    pub connection_pool: web::Data<PgPool>,
     pub database: DatabaseSettings,
+}
+
+impl TestApp {
+    pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
+        reqwest::Client::new()
+            .post(&format!("{}/subscriptions", &self.address))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(body)
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
 }
 
 impl Drop for TestApp {
@@ -40,7 +52,7 @@ impl Drop for TestApp {
 
             runtime.block_on(async {
                 connection_pool.close().await;
-                database_clean(connect_options, &database_name).await;
+                clean_database(connect_options, &database_name).await;
             });
         });
     }
@@ -49,24 +61,29 @@ impl Drop for TestApp {
 pub async fn spawn_app() -> TestApp {
     Lazy::force(&TRACING);
 
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
-    let port = listener.local_addr().unwrap().port();
+    let configurations = {
+        let mut c = get_configuration().expect("Failed to read configuration.");
+        c.database.database_name = Uuid::new_v4().to_string();
+        c.application.port = 0;
+        c
+    };
+    configure_database(&configurations.database).await;
 
-    let mut configurations = get_configuration().expect("Failed to read configuration.");
-    configurations.database.database_name = Uuid::new_v4().to_string();
-    let connection_pool = database_configure(&configurations.database).await;
-
-    let server = run(listener, connection_pool.clone()).expect("Failed to bind address");
-    tokio::spawn(server);
+    let application = Application::build(&configurations)
+        .await
+        .expect("Failed to build application.");
+    let connection_pool = application.get_connection_pool();
+    let address = format!("http://127.0.0.1:{}", application.port);
+    tokio::spawn(application.run_until_stopped());
 
     TestApp {
-        address: format!("http://127.0.0.1:{}", port),
+        address,
         connection_pool,
         database: configurations.database,
     }
 }
 
-async fn database_configure(db_settings: &DatabaseSettings) -> PgPool {
+async fn configure_database(db_settings: &DatabaseSettings) {
     let mut connection = PgConnection::connect_with(&db_settings.without_db())
         .await
         .expect("Failed to connect to Postgres.");
@@ -81,11 +98,9 @@ async fn database_configure(db_settings: &DatabaseSettings) -> PgPool {
         .run(&connection_pool)
         .await
         .expect("Failed to run migrations.");
-
-    connection_pool
 }
 
-async fn database_clean(connect_options: PgConnectOptions, database_name: &str) {
+async fn clean_database(connect_options: PgConnectOptions, database_name: &str) {
     let mut connection = PgConnection::connect_with(&connect_options)
         .await
         .expect("Failed to connect to Postgres.");
@@ -93,5 +108,4 @@ async fn database_clean(connect_options: PgConnectOptions, database_name: &str) 
         .execute(format!(r#"DROP DATABASE "{}";"#, database_name).as_str())
         .await
         .expect("Failed to drop database.");
-    println!("Dropped database: {}", database_name);
 }
