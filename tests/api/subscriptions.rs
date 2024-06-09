@@ -11,20 +11,21 @@ use sqlx::query;
 async fn subscribe_returns_a_200_for_valid_form_data() {
     // Arrange
     let app = spawn_app().await;
-    let connection_pool = &app.connection_pool;
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
 
     // Act
-    let response = app.post_subscriptions(body).await;
+    let response = app.post_subscriptions(body.into()).await;
 
     // Assert
     assert!(response.status().is_success());
     assert_eq!(200, response.status().as_u16());
 
     let saved = query!("SELECT email, name FROM subscriptions")
-        .fetch_one(connection_pool)
+        .fetch_one(app.connection_pool.as_ref())
         .await
         .expect("Failed to fetch saved subscription.");
+
+    app.connection_pool.close().await;
 
     assert_eq!(saved.email, "ursula_le_guin@gmail.com");
     assert_eq!(saved.name, "le guin");
@@ -48,7 +49,7 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
 
     for (invalid_body, error_message) in test_cases {
         // Act
-        let response = app.post_subscriptions(invalid_body).await;
+        let response = app.post_subscriptions(invalid_body.into()).await;
 
         // Assert
         assert_eq!(
@@ -72,7 +73,7 @@ async fn subscribe_returns_a_400_when_fields_are_present_but_empty() {
 
     for (body, description) in test_cases {
         // Act
-        let response = app.post_subscriptions(body).await;
+        let response = app.post_subscriptions(body.into()).await;
 
         // Assert
         assert_eq!(

@@ -1,3 +1,4 @@
+use actix_web::web;
 use newsletter_lib::configuration::{get_configuration, DatabaseSettings};
 use newsletter_lib::startup::Application;
 use newsletter_lib::telemetry::{get_subscriber, init_subscriber};
@@ -21,12 +22,12 @@ static TRACING: Lazy<()> = Lazy::new(|| {
 
 pub struct TestApp {
     pub address: String,
-    pub connection_pool: PgPool,
+    pub connection_pool: web::Data<PgPool>,
     pub database: DatabaseSettings,
 }
 
 impl TestApp {
-    pub async fn post_subscriptions(&self, body: &str) -> reqwest::Response {
+    pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
         reqwest::Client::new()
             .post(&format!("{}/subscriptions", &self.address))
             .header("Content-Type", "application/x-www-form-urlencoded")
@@ -66,12 +67,12 @@ pub async fn spawn_app() -> TestApp {
         c.application.port = 0;
         c
     };
-    let connection_pool = configure_database(&configurations.database).await;
+    configure_database(&configurations.database).await;
 
     let application = Application::build(&configurations)
         .await
         .expect("Failed to build application.");
-
+    let connection_pool = application.get_connection_pool();
     let address = format!("http://127.0.0.1:{}", application.port);
     tokio::spawn(application.run_until_stopped());
 
@@ -82,7 +83,7 @@ pub async fn spawn_app() -> TestApp {
     }
 }
 
-async fn configure_database(db_settings: &DatabaseSettings) -> PgPool {
+async fn configure_database(db_settings: &DatabaseSettings) {
     let mut connection = PgConnection::connect_with(&db_settings.without_db())
         .await
         .expect("Failed to connect to Postgres.");
@@ -97,8 +98,6 @@ async fn configure_database(db_settings: &DatabaseSettings) -> PgPool {
         .run(&connection_pool)
         .await
         .expect("Failed to run migrations.");
-
-    connection_pool
 }
 
 async fn clean_database(connect_options: PgConnectOptions, database_name: &str) {
@@ -109,5 +108,4 @@ async fn clean_database(connect_options: PgConnectOptions, database_name: &str) 
         .execute(format!(r#"DROP DATABASE "{}";"#, database_name).as_str())
         .await
         .expect("Failed to drop database.");
-    println!("Dropped database: {}", database_name);
 }
