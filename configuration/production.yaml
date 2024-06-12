@@ -8,4 +8,4 @@ database:
 
 email_client:
   base_url: https://api.postmarkapp.com
-  # `sender_email` and `authorization_token` should be set as environment variables.
+  # `APP_EMAIL_CLIENT__SENDER_EMAIL` and `APP_EMAIL_CLIENT__AUTHORIZATION_TOKEN` should be set as environment variables.
