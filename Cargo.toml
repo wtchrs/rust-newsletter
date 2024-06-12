@@ -50,6 +50,7 @@ features = ["json", "rustls-tls"]
 
 [dev-dependencies]
 fake = "2"
+linkify = "0.10"
 quickcheck = "1"
 quickcheck_macros = "1"
 rand = "0.8"
