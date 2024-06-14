@@ -3,6 +3,7 @@ use newsletter_lib::configuration::{get_configuration, DatabaseSettings};
 use newsletter_lib::startup::Application;
 use newsletter_lib::telemetry::{get_subscriber, init_subscriber};
 use once_cell::sync::Lazy;
+use reqwest::Response;
 use sqlx::postgres::PgConnectOptions;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
@@ -66,6 +67,15 @@ impl TestApp {
         let html = get_link(&email_body["HtmlBody"].as_str().unwrap());
         let plain_text = get_link(&email_body["TextBody"].as_str().unwrap());
         ConfirmationLinks { html, plain_text }
+    }
+
+    pub async fn post_newsletters(&self, body: serde_json::Value) -> Response {
+        reqwest::Client::new()
+            .post(&format!("{}/newsletters", self.address))
+            .json(&body)
+            .send()
+            .await
+            .expect("Failed to execute request.")
     }
 }
 

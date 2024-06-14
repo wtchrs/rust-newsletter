@@ -1,14 +1,16 @@
+use crate::errors::ParsingError;
+use std::fmt::{Debug, Display};
 use validator::ValidateEmail;
 
 #[derive(Debug)]
 pub struct SubscriberEmail(String);
 
 impl SubscriberEmail {
-    pub fn parse(s: String) -> Result<Self, String> {
+    pub fn parse(s: String) -> Result<Self, EmailParsingError> {
         if ValidateEmail::validate_email(&s) {
             Ok(Self(s))
         } else {
-            Err("Invalid email address".into())
+            Err(EmailParsingError)
         }
     }
 }
@@ -18,6 +20,30 @@ impl AsRef<str> for SubscriberEmail {
         &self.0
     }
 }
+
+impl Display for SubscriberEmail {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+#[derive(Debug)]
+pub struct EmailParsingError;
+
+impl std::fmt::Display for EmailParsingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Invalid email address.")
+    }
+}
+
+impl From<Box<EmailParsingError>> for Box<dyn ParsingError> {
+    fn from(value: Box<EmailParsingError>) -> Self {
+        value
+    }
+}
+
+impl std::error::Error for EmailParsingError {}
+impl ParsingError for EmailParsingError {}
 
 #[cfg(test)]
 mod tests {

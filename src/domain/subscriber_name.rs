@@ -1,15 +1,16 @@
+use crate::errors::ParsingError;
 use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Debug)]
 pub struct SubscriberName(String);
 
 impl SubscriberName {
-    pub fn parse(s: String) -> Result<Self, String> {
+    pub fn parse(s: String) -> Result<Self, NameParsingError> {
         if Self::is_empty_or_whitespace(&s)
             || Self::is_too_long(&s)
             || Self::contains_forbidden_characters(&s)
         {
-            Err("Invalid subscriber name".into())
+            Err(NameParsingError)
         } else {
             Ok(Self(s))
         }
@@ -37,6 +38,24 @@ impl AsRef<str> for SubscriberName {
         &self.0
     }
 }
+
+#[derive(Debug)]
+pub struct NameParsingError;
+
+impl std::fmt::Display for NameParsingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Invalid subscriber name.")
+    }
+}
+
+impl From<Box<NameParsingError>> for Box<dyn ParsingError> {
+    fn from(value: Box<NameParsingError>) -> Self {
+        value
+    }
+}
+
+impl std::error::Error for NameParsingError {}
+impl ParsingError for NameParsingError {}
 
 #[cfg(test)]
 mod tests {
