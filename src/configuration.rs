@@ -1,3 +1,4 @@
+use crate::domain::subscriber_email::EmailParsingError;
 use crate::domain::SubscriberEmail;
 use secrecy::{ExposeSecret, Secret};
 use serde_aux::field_attributes::deserialize_number_from_string;
@@ -118,7 +119,7 @@ pub struct EmailClientSettings {
 }
 
 impl EmailClientSettings {
-    pub fn sender(&self) -> Result<SubscriberEmail, String> {
+    pub fn sender(&self) -> Result<SubscriberEmail, EmailParsingError> {
         SubscriberEmail::parse(self.sender_email.clone())
     }
 

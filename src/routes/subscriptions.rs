@@ -1,31 +1,76 @@
+use self::SubscribeError::*;
 use crate::domain::SubscriberName;
 use crate::domain::{NewSubscriber, SubscriberEmail};
 use crate::email_client::EmailClient;
+use crate::errors::{error_chain_fmt, ParsingError};
 use crate::startup::ApplicationBaseUrl;
-use actix_web::{web, HttpResponse};
+use actix_web::http::StatusCode;
+use actix_web::{web, HttpResponse, ResponseError};
+use anyhow::Context;
 use chrono::Utc;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
-use sqlx::{PgPool, Postgres, Transaction};
-use std::ops::DerefMut;
+use sqlx::{Executor, PgPool, Postgres, Transaction};
+use std::fmt::{Debug, Display, Formatter};
 use uuid::Uuid;
 
+/// The form data passed to the subscribe endpoint.
+/// Actix-web will automatically parse the form data into this struct.
+///
+/// # Fields
+///
+/// - `email`: The email address of the new subscriber.
+/// - `name`: The name of the new subscriber.
 #[derive(serde::Deserialize)]
 pub struct FormData {
     email: String,
     name: String,
 }
 
+/// This struct implements the [TryInto] trait,
+/// which allows it to be converted into a [NewSubscriber].
+/// Wrong formats of the email address or name will be caught and returned as an error.
 impl TryInto<NewSubscriber> for FormData {
-    type Error = String;
+    type Error = Box<dyn ParsingError>;
 
     fn try_into(self) -> Result<NewSubscriber, Self::Error> {
-        let email = SubscriberEmail::parse(self.email)?;
-        let name = SubscriberName::parse(self.name)?;
+        let email = SubscriberEmail::parse(self.email).map_err(Box::new)?;
+        let name = SubscriberName::parse(self.name).map_err(Box::new)?;
         Ok(NewSubscriber { email, name })
     }
 }
 
+/// Add a new subscriber to the database.
+///
+/// # Request
+///
+/// ### URL-encoded Form Data
+///
+/// The URL-encoded form data will be passed as `form`, an instance of [FormData].
+/// Every field is required.
+///
+/// Field   | Description
+/// --------|-----------------------------------------
+/// `email` | The email address of the new subscriber.
+/// `name`  | The name of the new subscriber.
+///
+/// See [FormData] for more information.
+///
+/// # Response
+///
+/// - **200 OK** - The subscriber has been successfully added.
+/// - **400 Bad Request** - The request is malformed.
+/// - **500 Internal Server Error** - An error occurred while processing the request.
+///
+/// # Errors
+///
+/// This function can return [SubscribeError] which has the following variants:
+///
+/// - [ValidationError]: The form data is invalid.
+/// - [UnexpectedError]: An error occurred while processing the request.
+///
+/// See [SubscribeError::status_code] for more information
+/// about mapping between the error and status codes.
 #[tracing::instrument(
     name = "Adding a new subscriber",
     skip(pool, email_client, base_url, form),
@@ -36,47 +81,97 @@ pub async fn subscribe(
     email_client: web::Data<EmailClient>,
     base_url: web::Data<ApplicationBaseUrl>,
     form: web::Form<FormData>,
-) -> HttpResponse {
-    let new_subscriber = match form.0.try_into() {
-        Ok(value) => value,
-        Err(_) => return HttpResponse::BadRequest().finish(),
-    };
+) -> Result<HttpResponse, SubscribeError> {
+    let new_subscriber = form.0.try_into().map_err(ValidationError)?;
 
-    let mut transaction = match pool.begin().await {
-        Ok(tx) => tx,
-        Err(_) => return HttpResponse::InternalServerError().finish(),
-    };
-
-    let subscriber_id = match insert_subscriber(&mut transaction, &new_subscriber).await {
-        Ok(value) => value,
-        Err(_) => return HttpResponse::InternalServerError().finish(),
-    };
-
-    let subscription_token = generate_subscription_token();
-    if store_token(&mut transaction, &subscriber_id, &subscription_token)
+    // Transaction start
+    let mut transaction = pool
+        .begin()
         .await
-        .is_err()
-    {
-        return HttpResponse::InternalServerError().finish();
-    }
+        .context("Failed to acquire a Postgres connection from the pool.")?;
+    let subscriber_id = insert_subscriber(&mut transaction, &new_subscriber)
+        .await
+        .context("Failed to insert a new subscriber into the database.")?;
+    let subscription_token = generate_subscription_token();
+    store_token(&mut transaction, &subscriber_id, &subscription_token)
+        .await
+        .context("Failed to store the confirmation token for a new subscriber.")?;
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit SQL transaction to store a new subscriber.")?;
 
-    if transaction.commit().await.is_err() {
-        return HttpResponse::InternalServerError().finish();
-    };
-
-    if send_confirmation_email(
+    send_confirmation_email(
         &email_client,
         new_subscriber,
         &base_url.0,
         &subscription_token,
     )
     .await
-    .is_err()
-    {
-        return HttpResponse::InternalServerError().finish();
-    }
+    .context("Failed to send the confirmation email.")?;
 
-    HttpResponse::Ok().finish()
+    Ok(HttpResponse::Ok().finish())
+}
+
+/// Errors that can occur when adding a new subscriber.
+/// This is a custom error type that wraps the various errors that can occur
+/// when adding a new subscriber.
+#[derive(thiserror::Error)]
+pub enum SubscribeError {
+    /// The form data is invalid.
+    #[error(transparent)]
+    ValidationError(#[from] Box<dyn ParsingError>),
+    /// An unexpected error occurred.
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+/// This allows the error to be converted into an HTTP response.
+/// The conversion is automatically done by `actix-web`.
+impl ResponseError for SubscribeError {
+    /// Maps the error to a status code.
+    ///
+    /// # Status Codes
+    ///
+    /// - [ValidationError]: 400 Bad Request
+    /// - [UnexpectedError]: 500 Internal Server Error
+    fn status_code(&self) -> StatusCode {
+        match self {
+            ValidationError(_) => StatusCode::BAD_REQUEST,
+            UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
+impl Debug for SubscribeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        error_chain_fmt(self, f)
+    }
+}
+
+/// Wrapper around a [sqlx::Error] to provide a more descriptive error message.
+/// This error type is used when storing the subscription token fails.
+pub struct StoreTokenError(sqlx::Error);
+
+impl Debug for StoreTokenError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        error_chain_fmt(&self, f)
+    }
+}
+
+impl Display for StoreTokenError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "A database error occurred when storing the subscription token."
+        )
+    }
+}
+
+impl std::error::Error for StoreTokenError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.0)
+    }
 }
 
 #[tracing::instrument(
@@ -89,7 +184,7 @@ async fn insert_subscriber(
 ) -> Result<Uuid, sqlx::Error> {
     let subscriber_id = Uuid::new_v4();
 
-    sqlx::query!(
+    let query = sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at, status)
         VALUES ($1, $2, $3, $4, 'pending_confirmation')
@@ -98,13 +193,8 @@ async fn insert_subscriber(
         new_subscriber.email.as_ref(),
         new_subscriber.name.as_ref(),
         Utc::now()
-    )
-    .execute(tx.deref_mut())
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to execute query: {:?}", e);
-        e
-    })?;
+    );
+    tx.execute(query).await?;
 
     Ok(subscriber_id)
 }
@@ -117,21 +207,16 @@ async fn store_token(
     tx: &mut Transaction<'_, Postgres>,
     subscriber_id: &Uuid,
     subscription_token: &str,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
+) -> Result<(), StoreTokenError> {
+    let query = sqlx::query!(
         r#"
         INSERT INTO subscription_tokens (subscriber_id, subscription_token)
         values ($1, $2)
         "#,
         subscriber_id,
         subscription_token
-    )
-    .execute(tx.deref_mut())
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to execute query: {:?}", e);
-        e
-    })?;
+    );
+    tx.execute(query).await.map_err(StoreTokenError)?;
 
     Ok(())
 }
