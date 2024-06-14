@@ -1,4 +1,5 @@
 use crate::errors::ParsingError;
+use std::fmt::{Debug, Display};
 use validator::ValidateEmail;
 
 #[derive(Debug)]
@@ -17,6 +18,12 @@ impl SubscriberEmail {
 impl AsRef<str> for SubscriberEmail {
     fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+
+impl Display for SubscriberEmail {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
     }
 }
 
