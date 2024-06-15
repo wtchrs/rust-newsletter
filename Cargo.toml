@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 actix-web = "4"
 anyhow = "1"
+base64 = "0.22"
 chrono = { version = "0.4.38", default-features = false, features = ["clock"] }
 claim = "0.5"
 config = "0.14"
@@ -23,6 +24,7 @@ rand = { version = "0.8", features = ["std_rng"] }
 secrecy = { version = "0.8", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde-aux = "4"
+sha3 = "0.10"
 thiserror = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tracing = { version = "0.1", features = ["log"] }
