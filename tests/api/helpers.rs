@@ -63,7 +63,7 @@ pub struct TestApp {
     pub connection_pool: web::Data<PgPool>,
     pub database: DatabaseSettings,
     pub email_server: MockServer,
-    user: TestUser,
+    pub test_user: TestUser,
 }
 
 pub struct ConfirmationLinks {
@@ -108,7 +108,7 @@ impl TestApp {
     pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
         reqwest::Client::new()
             .post(&format!("{}/newsletters", self.address))
-            .basic_auth(&self.user.username, Some(&self.user.password))
+            .basic_auth(&self.test_user.username, Some(&self.test_user.password))
             .json(&body)
             .send()
             .await
@@ -167,7 +167,7 @@ pub async fn spawn_app() -> TestApp {
         connection_pool,
         database: configurations.database,
         email_server,
-        user,
+        test_user: user,
     }
 }
 
