@@ -1,11 +1,13 @@
 use crate::configuration::Settings;
 use crate::email_client::EmailClient;
-use crate::routes::{confirm, health_check, publish_newsletter, subscribe};
+use crate::routes::*;
 use actix_web::dev::Server;
 use actix_web::{web, App, HttpServer};
+use secrecy::Secret;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::net::TcpListener;
+use tera::Tera;
 use tracing_actix_web::TracingLogger;
 
 pub struct Application {
@@ -33,6 +35,8 @@ impl Application {
             timeout,
         );
 
+        let templates_engine = Tera::new("templates/**/*").expect("Failed to parsing templates.");
+
         let address = format!(
             "{}:{}",
             configurations.application.host, configurations.application.port
@@ -44,7 +48,9 @@ impl Application {
             listener,
             connection_pool.clone(),
             email_client,
+            templates_engine,
             configurations.application.base_url.clone(),
+            configurations.application.hmac_secret.clone(),
         )?;
 
         Ok(Self {
@@ -68,25 +74,35 @@ impl Application {
 }
 
 pub struct ApplicationBaseUrl(pub String);
+pub struct HmacSecret(pub Secret<String>);
 
 fn run(
     listener: TcpListener,
     connection_pool: web::Data<PgPool>,
     email_client: EmailClient,
+    templates_engine: Tera,
     base_url: String,
+    hmac_secret: Secret<String>,
 ) -> std::io::Result<Server> {
     let email_client = web::Data::new(email_client);
+    let templates_engine = web::Data::new(templates_engine);
     let base_url = web::Data::new(ApplicationBaseUrl(base_url));
+    let hmac_secret = web::Data::new(HmacSecret(hmac_secret));
     let server = HttpServer::new(move || {
         App::new()
             .wrap(TracingLogger::default())
+            .route("/", web::get().to(home))
+            .route("/login", web::get().to(login_form))
+            .route("/login", web::post().to(login))
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe))
             .route("/subscriptions/confirm", web::get().to(confirm))
             .route("/newsletters", web::post().to(publish_newsletter))
             .app_data(connection_pool.clone())
             .app_data(email_client.clone())
+            .app_data(templates_engine.clone())
             .app_data(base_url.clone())
+            .app_data(hmac_secret.clone())
     })
     .listen(listener)?
     .run();

@@ -3,6 +3,8 @@
 application:
   port: 8080
   base_url: http://127.0.0.1
+  # 'APP_APPLICATION__HMAC_SECRET' should be set as an environment variable in the production environment.
+  hmac_secret: 5k1NQ78d9D%#*@Mb4u^05tQO1Xp0$JL90FdCrotN3tXi8sabNum1b3f!frj#K!sD
 
 database:
   host: localhost
