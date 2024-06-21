@@ -1,11 +1,10 @@
 use crate::authentication::{validate_credentials, AuthError, Credentials};
 use crate::errors::error_chain_fmt;
-use crate::startup::HmacSecret;
+use actix_web::cookie::Cookie;
 use actix_web::error::InternalError;
 use actix_web::http::header;
 use actix_web::{web, HttpResponse};
-use hmac::{Hmac, Mac};
-use secrecy::{ExposeSecret, Secret};
+use secrecy::Secret;
 use sqlx::PgPool;
 
 #[derive(thiserror::Error)]
@@ -22,6 +21,15 @@ impl std::fmt::Debug for LoginError {
     }
 }
 
+impl From<AuthError> for LoginError {
+    fn from(e: AuthError) -> Self {
+        match e {
+            AuthError::InvalidCredentials(_) => LoginError::AuthError(e.into()),
+            AuthError::UnexpectedError(_) => LoginError::UnexpectedError(e.into()),
+        }
+    }
+}
+
 #[derive(serde::Deserialize)]
 pub struct FormData {
     username: String,
@@ -29,12 +37,11 @@ pub struct FormData {
 }
 
 #[tracing::instrument(
-    skip(pool, secret, form),
+    skip(pool, form),
     fields(username=tracing::field::Empty, user_id=tracing::field::Empty)
 )]
 pub async fn login(
     pool: web::Data<PgPool>,
-    secret: web::Data<HmacSecret>,
     form: web::Form<FormData>,
 ) -> Result<HttpResponse, InternalError<LoginError>> {
     let credentials = Credentials {
@@ -50,25 +57,10 @@ pub async fn login(
                 .finish())
         }
         Err(e) => {
-            let e = match e {
-                AuthError::InvalidCredentials(_) => LoginError::AuthError(e.into()),
-                AuthError::UnexpectedError(_) => LoginError::UnexpectedError(e.into()),
-            };
-
-            let query_string = format!("error={}", urlencoding::encode(&e.to_string()));
-            let hmac_tag = {
-                let secret = secret.0.expose_secret().as_bytes();
-                let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret)
-                    .expect("HMAC can take key of any size");
-                mac.update(query_string.as_bytes());
-                mac.finalize().into_bytes()
-            };
-
+            let e = LoginError::from(e);
             let response = HttpResponse::SeeOther()
-                .insert_header((
-                    header::LOCATION,
-                    format!("/login?{query_string}&tag={hmac_tag:x}"),
-                ))
+                .insert_header((header::LOCATION, "/login"))
+                .cookie(Cookie::new("_flash", e.to_string()))
                 .finish();
             Err(InternalError::from_response(e, response))
         }

@@ -50,7 +50,6 @@ impl Application {
             email_client,
             templates_engine,
             configurations.application.base_url.clone(),
-            configurations.application.hmac_secret.clone(),
         )?;
 
         Ok(Self {
@@ -82,12 +81,10 @@ fn run(
     email_client: EmailClient,
     templates_engine: Tera,
     base_url: String,
-    hmac_secret: Secret<String>,
 ) -> std::io::Result<Server> {
     let email_client = web::Data::new(email_client);
     let templates_engine = web::Data::new(templates_engine);
     let base_url = web::Data::new(ApplicationBaseUrl(base_url));
-    let hmac_secret = web::Data::new(HmacSecret(hmac_secret));
     let server = HttpServer::new(move || {
         App::new()
             .wrap(TracingLogger::default())
@@ -102,7 +99,6 @@ fn run(
             .app_data(email_client.clone())
             .app_data(templates_engine.clone())
             .app_data(base_url.clone())
-            .app_data(hmac_secret.clone())
     })
     .listen(listener)?
     .run();
