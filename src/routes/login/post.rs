@@ -1,9 +1,9 @@
 use crate::authentication::{validate_credentials, AuthError, Credentials};
 use crate::errors::error_chain_fmt;
-use actix_web::cookie::Cookie;
 use actix_web::error::InternalError;
 use actix_web::http::header;
 use actix_web::{web, HttpResponse};
+use actix_web_flash_messages::FlashMessage;
 use secrecy::Secret;
 use sqlx::PgPool;
 
@@ -58,9 +58,9 @@ pub async fn login(
         }
         Err(e) => {
             let e = LoginError::from(e);
+            FlashMessage::error(e.to_string()).send();
             let response = HttpResponse::SeeOther()
                 .insert_header((header::LOCATION, "/login"))
-                .cookie(Cookie::new("_flash", e.to_string()))
                 .finish();
             Err(InternalError::from_response(e, response))
         }

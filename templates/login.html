@@ -5,9 +5,9 @@
         <title>Login</title>
     </head>
     <body>
-        {% if error %}
-        <p><i>{{ error }}</i></p>
-        {% endif %}
+        {% for message in flash_messages %}
+        <p><i>{{ message }}</i></p>
+        {% endfor %}
 
         <form action="/login" method="post">
             <label for="username">Username</label>
