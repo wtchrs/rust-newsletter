@@ -10,6 +10,7 @@ pub struct Settings {
     pub database: DatabaseSettings,
     pub application: ApplicationSettings,
     pub email_client: EmailClientSettings,
+    pub redis_url: Secret<String>,
 }
 
 pub fn get_configuration() -> Result<Settings, config::ConfigError> {
