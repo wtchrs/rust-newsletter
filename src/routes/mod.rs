@@ -7,6 +7,9 @@ mod subscriptions;
 mod subscriptions_confirm;
 
 pub use admin::dashboard::admin_dashboard;
+pub use admin::logout::log_out;
+pub use admin::password::change_password;
+pub use admin::password::change_password_form;
 pub use health_check::health_check;
 pub use home::home;
 pub use login::login_form;

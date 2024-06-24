@@ -16,6 +16,7 @@ path = "src/main.rs"
 actix-session = { version = "0.9", features = ["redis-rs-tls-session"] }
 actix-web = "4"
 actix-web-flash-messages = { version = "0.4", features = ["cookies"] }
+actix-web-lab = "0.20"
 anyhow = "1"
 argon2 = { version = "0.5", features = ["std"] }
 base64 = "0.22"
