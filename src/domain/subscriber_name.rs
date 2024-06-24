@@ -1,4 +1,4 @@
-use crate::errors::ParsingError;
+use crate::utils::ParsingError;
 use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Debug)]

@@ -1,4 +1,4 @@
-use crate::errors::ParsingError;
+use crate::utils::ParsingError;
 use std::fmt::{Debug, Display};
 use validator::ValidateEmail;
 

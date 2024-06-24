@@ -1,11 +1,23 @@
-# Edit with your own configuration
+# Override the settings with your own configuration.
+# Alternatively, set them as environment variables.
 
 application:
   host: 0.0.0.0
+  # port:
+  # base_url:
+  # hmac_secret:
 
 database:
   require_ssl: true
+  # host:
+  # port:
+  # username:
+  # password:
+  # database_name:
 
 email_client:
   base_url: https://api.postmarkapp.com
-  # `APP_EMAIL_CLIENT__SENDER_EMAIL` and `APP_EMAIL_CLIENT__AUTHORIZATION_TOKEN` should be set as environment variables.
+  # sender_email:
+  # authorization_token:
+
+# redis_url:
