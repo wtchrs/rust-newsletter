@@ -1,80 +1,42 @@
 use crate::authentication::UserId;
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
-use crate::utils::error_chain_fmt;
-use actix_web::body::BoxBody;
-use actix_web::http::{header, StatusCode};
-use actix_web::{web, HttpResponse, ResponseError};
+use crate::utils::e500;
+use actix_web::{web, HttpResponse};
 use anyhow::Context;
 use sqlx::PgPool;
 use std::fmt::{Debug, Display};
 
-#[derive(thiserror::Error)]
-pub enum PublishError {
-    #[error("Authentication failed.")]
-    AuthError(#[source] anyhow::Error),
-    #[error(transparent)]
-    UnexpectedError(#[from] anyhow::Error),
-}
-
-impl Debug for PublishError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        error_chain_fmt(self, f)
-    }
-}
-
-impl ResponseError for PublishError {
-    fn error_response(&self) -> HttpResponse<BoxBody> {
-        match self {
-            PublishError::AuthError(_) => {
-                let mut response = HttpResponse::new(StatusCode::UNAUTHORIZED);
-                response.headers_mut().insert(
-                    header::WWW_AUTHENTICATE,
-                    header::HeaderValue::from_str("Basic realm=\"publish\"").unwrap(),
-                );
-                response
-            }
-            PublishError::UnexpectedError(_) => {
-                HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-        }
-    }
-}
-
 #[derive(serde::Deserialize)]
-pub struct BodyData {
+pub struct FormData {
     title: String,
-    content: Content,
+    html_content: String,
+    text_content: String,
 }
 
-#[derive(serde::Deserialize)]
-pub struct Content {
-    html: String,
-    text: String,
-}
-
-#[tracing::instrument(name = "Publish a newsletter", skip(pool, email_client, body))]
+#[tracing::instrument(name = "Publish a newsletter", skip(pool, email_client, form))]
 pub async fn publish_newsletter(
     pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
-    user_id: web::ReqData<UserId>,
-    body: web::Json<BodyData>,
-) -> Result<HttpResponse, PublishError> {
-    let subscribers = get_confirmed_subscribers(&pool).await?;
+    _user_id: web::ReqData<UserId>,
+    form: web::Form<FormData>,
+) -> Result<HttpResponse, actix_web::Error> {
+    let subscribers = get_confirmed_subscribers(&pool).await.map_err(e500)?;
     for subscriber in subscribers {
         match subscriber {
             Ok(subscriber) => email_client
                 .send_email(
                     &subscriber.email,
-                    &body.title,
-                    &body.content.html,
-                    &body.content.text,
+                    &form.title,
+                    &form.html_content,
+                    &form.text_content,
                 )
                 .await
                 .context(format!(
                     "Failed to send newsletter issue to {}",
                     subscriber.email
-                ))?,
+                ))
+                .map_err(e500)?,
             Err(e) => tracing::warn!("Skipping invalid subscriber email: {}", e),
         }
     }

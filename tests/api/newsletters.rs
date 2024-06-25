@@ -1,5 +1,4 @@
 use crate::helpers::{assert_is_redirect_to, spawn_app, ConfirmationLinks, TestApp};
-use uuid::Uuid;
 use wiremock::matchers::{any, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -57,13 +56,10 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
     .await;
 
     // Act - Post new newsletter
-    // Skeleton code for sending a newsletter.
     let newsletter_request_body = serde_json::json!({
         "title": "Newsletter title",
-        "content": {
-            "text": "Newsletter body as plain text",
-            "html": "<p>Newsletter body as HTML</p>"
-        }
+        "html_content": "<p>Newsletter body as HTML</p>",
+        "text_content": "Newsletter body as plain text",
     });
     let response = app.post_newsletters(newsletter_request_body).await;
 
@@ -97,10 +93,8 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
     // Act - Post new newsletter
     let newsletter_request_body = serde_json::json!({
         "title": "Newsletter title",
-        "content": {
-            "text": "Newsletter body as plain text",
-            "html": "<p>Newsletter body as HTML</p>"
-        }
+        "html_content": "<p>Newsletter body as HTML</p>",
+        "text_content": "Newsletter body as plain text",
     });
     let response = app.post_newsletters(newsletter_request_body).await;
 
@@ -118,10 +112,8 @@ async fn newsletters_returns_400_for_invalid_data() {
     let test_cases = vec![
         (
             serde_json::json!({
-                "content": {
-                    "text": "Newsletter body as plain text",
-                    "html": "<p>Newsletter body as HTML</p>",
-                }
+                "html_content": "<p>Newsletter body as HTML</p>",
+                "text_content": "Newsletter body as plain text",
             }),
             "missing title",
         ),
@@ -132,18 +124,14 @@ async fn newsletters_returns_400_for_invalid_data() {
         (
             serde_json::json!({
                 "title": "Newsletter title",
-                "content": {
-                    "text": "Newsletter body as plain text",
-                }
+                "text_content": "Newsletter body as plain text",
             }),
             "missing content.html",
         ),
         (
             serde_json::json!({
                 "title": "Newsletter title",
-                "content": {
-                    "html": "<p>Newsletter body as HTML</p>",
-                }
+                "html_content": "<p>Newsletter body as HTML</p>",
             }),
             "missing content.text",
         ),
@@ -177,15 +165,12 @@ async fn requests_missing_authorization_are_rejected() {
 
     // Act
     // Send request without login
-    let response = app
-        .post_newsletters(serde_json::json!({
-            "title": "Newsletter title",
-            "content": {
-                "text": "Newsletter body as plain text",
-                "html": "<p>Newsletter body as HTML</p>"
-            }
-        }))
-        .await;
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "html_content": "<p>Newsletter body as HTML</p>",
+        "text_content": "Newsletter body as plain text",
+    });
+    let response = app.post_newsletters(newsletter_request_body).await;
 
     assert_is_redirect_to(&response, "/login");
 }
