@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Post a newsletter</title>
+    </head>
+    <body>
+        <form action="/admin/newsletters" method="post">
+            <label for="title">Title</label>
+            <input type="text" name="title" id="title">
+
+            <label for="html_content">HTML content</label>
+            <textarea name="html_content" id="html_content"></textarea>
+
+            <label for="text_content">Text content</label>
+            <textarea name="text_content" id="text_content"></textarea>
+
+            <button type="submit">Post</button>
+        </form>
+    </body>
+</html>

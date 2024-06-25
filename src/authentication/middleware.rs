@@ -24,6 +24,7 @@ impl Deref for UserId {
     }
 }
 
+#[tracing::instrument(name = "Reject anonymous user", skip(req, next))]
 pub async fn reject_anonymous_user(
     mut req: ServiceRequest,
     next: Next<impl MessageBody>,

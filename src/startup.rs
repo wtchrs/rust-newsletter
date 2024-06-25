@@ -115,13 +115,14 @@ async fn run(
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe))
             .route("/subscriptions/confirm", web::get().to(confirm))
-            .route("/newsletters", web::post().to(publish_newsletter))
             .service(
                 web::scope("/admin")
                     .wrap(from_fn(reject_anonymous_user))
                     .route("/dashboard", web::get().to(admin_dashboard))
                     .route("/password", web::get().to(change_password_form))
                     .route("/password", web::post().to(change_password))
+                    .route("/newsletters", web::get().to(publish_newsletter_form))
+                    .route("/newsletters", web::post().to(publish_newsletter))
                     .route("/logout", web::post().to(log_out)),
             )
             .app_data(connection_pool.clone())
