@@ -42,19 +42,13 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
     // Arrange
     let app = spawn_app().await;
     create_unconfirmed_subscriber(&app).await;
+    app.test_user.login(&app).await;
 
     Mock::given(any())
         .respond_with(ResponseTemplate::new(200))
         .expect(0)
         .mount(&app.email_server)
         .await;
-
-    // Log in before post new newsletter
-    app.post_login(&serde_json::json!({
-        "username": app.test_user.username,
-        "password": app.test_user.password,
-    }))
-    .await;
 
     // Act - Post new newsletter
     let newsletter_request_body = serde_json::json!({
@@ -78,6 +72,7 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
     // Arrange
     let app = spawn_app().await;
     create_confirmed_subscriber(&app).await;
+    app.test_user.login(&app).await;
 
     Mock::given(path("/email"))
         .and(method("POST"))
@@ -85,13 +80,6 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
         .expect(1)
         .mount(&app.email_server)
         .await;
-
-    // Log in before post new newsletter
-    app.post_login(&serde_json::json!({
-        "username": app.test_user.username,
-        "password": app.test_user.password,
-    }))
-    .await;
 
     // Act - Post new newsletter
     let newsletter_request_body = serde_json::json!({
@@ -114,6 +102,8 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
 async fn newsletters_returns_400_for_invalid_data() {
     // Arrange
     let app = spawn_app().await;
+    app.test_user.login(&app).await;
+
     let test_cases = vec![
         (
             serde_json::json!({
@@ -155,13 +145,6 @@ async fn newsletters_returns_400_for_invalid_data() {
             "missing idempotency_key",
         ),
     ];
-
-    // Log in before post new newsletter
-    app.post_login(&serde_json::json!({
-        "username": app.test_user.username,
-        "password": app.test_user.password,
-    }))
-    .await;
 
     for (invalid_body, error_message) in test_cases {
         // Act

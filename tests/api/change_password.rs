@@ -42,11 +42,7 @@ async fn new_password_fields_must_match() {
     let another_new_password = Uuid::new_v4().to_string();
 
     // Act 1 - Login
-    app.post_login(&serde_json::json!({
-        "username": app.test_user.username,
-        "password": app.test_user.password,
-    }))
-    .await;
+    app.test_user.login(&app).await;
 
     // Act 2 - Try changing password
     let response = app
@@ -73,11 +69,7 @@ async fn current_password_must_be_valid() {
     let new_password = Uuid::new_v4().to_string();
 
     // Act 1 - Login
-    app.post_login(&serde_json::json!({
-        "username": app.test_user.username,
-        "password": app.test_user.password,
-    }))
-    .await;
+    app.test_user.login(&app).await;
 
     // Act 2 - Try changing password
     let response = app
@@ -101,11 +93,7 @@ async fn new_password_must_be_at_least_12_characters_long() {
     let invalid_new_password = generate_random_alphanumeric(11);
 
     // Act 1 - Login
-    app.post_login(&serde_json::json!({
-        "username": app.test_user.username,
-        "password": app.test_user.password,
-    }))
-    .await;
+    app.test_user.login(&app).await;
 
     // Act 2 - Try changing password
     let response = app
@@ -131,11 +119,7 @@ async fn new_password_must_be_at_most_128_characters_long() {
     let invalid_new_password = generate_random_alphanumeric(129);
 
     // Act 1 - Login
-    app.post_login(&serde_json::json!({
-        "username": app.test_user.username,
-        "password": app.test_user.password,
-    }))
-    .await;
+    app.test_user.login(&app).await;
 
     // Act 2 - Try changing password
     let response = app
