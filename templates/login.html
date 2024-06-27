@@ -5,9 +5,11 @@
         <title>Login</title>
     </head>
     <body>
+        {% if flash_messages %}
         {% for message in flash_messages %}
             <p><i>{{ message }}</i></p>
         {% endfor %}
+        {% endif %}
 
         <form action="/login" method="post">
             <label for="username">Username</label>
