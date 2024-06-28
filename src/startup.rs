@@ -29,18 +29,7 @@ impl Application {
             .acquire_timeout(std::time::Duration::from_secs(2))
             .connect_lazy_with(configurations.database.with_db());
         let connection_pool = web::Data::new(connection_pool);
-
-        let sender_email = configurations
-            .email_client
-            .sender()
-            .expect("Invalid sender email.");
-        let timeout = configurations.email_client.timeout();
-        let email_client = EmailClient::new(
-            configurations.email_client.base_url.clone(),
-            sender_email,
-            configurations.email_client.authorization_token.clone(),
-            timeout,
-        );
+        let email_client = configurations.email_client.client();
 
         let templates_engine = Tera::new("templates/**/*").expect("Failed to parsing templates.");
 
@@ -56,9 +45,9 @@ impl Application {
             connection_pool.clone(),
             email_client,
             templates_engine,
-            configurations.application.base_url.clone(),
-            configurations.application.hmac_secret.clone(),
-            configurations.redis_url.clone(),
+            configurations.application.base_url.to_owned(),
+            configurations.application.hmac_secret.to_owned(),
+            configurations.redis_url.to_owned(),
         )
         .await?;
 

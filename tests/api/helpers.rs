@@ -2,10 +2,11 @@ use actix_web::web;
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHasher};
 use newsletter_lib::configuration::{get_configuration, DatabaseSettings};
+use newsletter_lib::email_client::EmailClient;
+use newsletter_lib::issue_delivery_worker::{try_execute_task, ExecutionOutcome};
 use newsletter_lib::startup::Application;
 use newsletter_lib::telemetry::{get_subscriber, init_subscriber};
 use once_cell::sync::Lazy;
-use sqlx::postgres::PgConnectOptions;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 use wiremock::MockServer;
@@ -55,6 +56,14 @@ impl TestUser {
         .await
         .expect("Failed to store test user.");
     }
+
+    pub async fn login(&self, app: &TestApp) {
+        app.post_login(&serde_json::json!({
+            "username": app.test_user.username,
+            "password": app.test_user.password,
+        }))
+        .await;
+    }
 }
 
 pub struct TestApp {
@@ -65,6 +74,7 @@ pub struct TestApp {
     pub email_server: MockServer,
     pub test_user: TestUser,
     pub api_client: reqwest::Client,
+    pub email_client: EmailClient,
 }
 
 pub struct ConfirmationLinks {
@@ -73,7 +83,25 @@ pub struct ConfirmationLinks {
 }
 
 impl TestApp {
-    pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
+    pub async fn dispatch_all_pending_emails(&self) {
+        while let ExecutionOutcome::TaskCompleted =
+            try_execute_task(&self.connection_pool, &self.email_client)
+                .await
+                .unwrap()
+        {}
+    }
+
+    pub async fn post_subscriptions(&self, body: &serde_json::Value) -> reqwest::Response {
+        self.api_client
+            .post(&format!("{}/subscriptions", &self.address))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .form(body)
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn post_subscriptions_with_str(&self, body: &'static str) -> reqwest::Response {
         self.api_client
             .post(&format!("{}/subscriptions", &self.address))
             .header("Content-Type", "application/x-www-form-urlencoded")
@@ -106,7 +134,18 @@ impl TestApp {
         ConfirmationLinks { html, plain_text }
     }
 
-    pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
+    pub async fn get_publish_newsletter_html(&self) -> String {
+        self.api_client
+            .get(&format!("{}/admin/newsletters", self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+            .text()
+            .await
+            .unwrap()
+    }
+
+    pub async fn post_publish_newsletter(&self, body: &serde_json::Value) -> reqwest::Response {
         self.api_client
             .post(&format!("{}/admin/newsletters", self.address))
             .form(&body)
@@ -183,26 +222,6 @@ impl TestApp {
     }
 }
 
-impl Drop for TestApp {
-    fn drop(&mut self) {
-        let connect_options = self.database.without_db();
-        let database_name = self.database.database_name.clone();
-        let connection_pool = self.connection_pool.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let runtime = tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-
-            runtime.block_on(async {
-                connection_pool.close().await;
-                clean_database(connect_options, &database_name).await;
-            });
-        });
-    }
-}
-
 pub async fn spawn_app() -> TestApp {
     Lazy::force(&TRACING);
 
@@ -242,6 +261,7 @@ pub async fn spawn_app() -> TestApp {
         email_server,
         test_user: user,
         api_client: client,
+        email_client: configurations.email_client.client(),
     }
 }
 
@@ -267,15 +287,4 @@ async fn configure_database(db_settings: &DatabaseSettings) {
         .expect("Failed to run migrations.");
     connection.close().await.unwrap();
     connection_pool.close().await;
-}
-
-async fn clean_database(connect_options: PgConnectOptions, database_name: &str) {
-    let mut connection = PgConnection::connect_with(&connect_options)
-        .await
-        .expect("Failed to connect to Postgres.");
-    connection
-        .execute(format!(r#"DROP DATABASE "{}";"#, database_name).as_str())
-        .await
-        .expect("Failed to drop database.");
-    connection.close().await.unwrap();
 }
