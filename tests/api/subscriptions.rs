@@ -22,7 +22,7 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
         .await;
 
     // Act
-    let response = app.post_subscriptions(body.into()).await;
+    let response = app.post_subscriptions_with_str(body).await;
 
     // Assert
     assert!(response.status().is_success());
@@ -42,7 +42,7 @@ async fn subscribe_persists_the_new_subscriber() {
         .await;
 
     // Act
-    app.post_subscriptions(body.into()).await;
+    app.post_subscriptions_with_str(body).await;
 
     // Assert
     let saved = query!("SELECT email, name, status FROM subscriptions")
@@ -75,7 +75,7 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
 
     for (invalid_body, error_message) in test_cases {
         // Act
-        let response = app.post_subscriptions(invalid_body.into()).await;
+        let response = app.post_subscriptions_with_str(invalid_body).await;
 
         // Assert
         assert_eq!(
@@ -99,7 +99,7 @@ async fn subscribe_returns_a_400_when_fields_are_present_but_empty() {
 
     for (body, description) in test_cases {
         // Act
-        let response = app.post_subscriptions(body.into()).await;
+        let response = app.post_subscriptions_with_str(body).await;
 
         // Assert
         assert_eq!(
@@ -125,7 +125,7 @@ async fn subscribe_sends_a_confirmation_email_for_valid_data() {
         .await;
 
     // Act
-    app.post_subscriptions(body.into()).await;
+    app.post_subscriptions_with_str(body).await;
 
     // Assert
 }
@@ -143,7 +143,7 @@ async fn subscribe_sends_a_confirmation_email_with_a_link() {
         .await;
 
     // Act
-    app.post_subscriptions(body.into()).await;
+    app.post_subscriptions_with_str(body).await;
 
     // Assert
     let email_request = &app.email_server.received_requests().await.unwrap()[0];
@@ -165,7 +165,7 @@ async fn subscribe_fails_if_there_is_a_fatal_database_error() {
         .expect("Failed to drop the subscriptions table");
 
     // Act
-    let response = app.post_subscriptions(body.into()).await;
+    let response = app.post_subscriptions_with_str(body).await;
 
     // Assert
     assert_eq!(response.status().as_u16(), 500);

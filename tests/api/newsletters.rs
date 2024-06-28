@@ -1,10 +1,18 @@
 use crate::helpers::{assert_is_redirect_to, spawn_app, ConfirmationLinks, TestApp};
+use fake::faker::internet::en::SafeEmail;
+use fake::faker::name::en::Name;
+use fake::Fake;
 use std::time::Duration;
 use wiremock::matchers::{any, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 async fn create_unconfirmed_subscriber(app: &TestApp) -> ConfirmationLinks {
-    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let name: String = Name().fake();
+    let email: String = SafeEmail().fake();
+    let body = serde_json::json!({
+        "name": name,
+        "email": email,
+    });
 
     let _mock_guard = Mock::given(path("/email"))
         .and(method("POST"))
@@ -13,7 +21,7 @@ async fn create_unconfirmed_subscriber(app: &TestApp) -> ConfirmationLinks {
         .expect(1)
         .mount_as_scoped(&app.email_server)
         .await;
-    app.post_subscriptions(body.into())
+    app.post_subscriptions(&body)
         .await
         .error_for_status()
         .unwrap();
@@ -60,8 +68,9 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
     let response = app.post_publish_newsletter(&newsletter_request_body).await;
 
     // Assert
-    // assert_eq!(response.status().as_u16(), 200);
     assert_is_redirect_to(&response, "/admin/newsletters");
+
+    app.dispatch_all_pending_emails().await;
 
     // Mock is dropped here and
     // verify whether the newsletter email was not sent to the unconfirmed subscriber.
@@ -91,8 +100,9 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
     let response = app.post_publish_newsletter(&newsletter_request_body).await;
 
     // Assert
-    // assert_eq!(response.status().as_u16(), 200);
     assert_is_redirect_to(&response, "/admin/newsletters");
+
+    app.dispatch_all_pending_emails().await;
 
     // Mock is dropped here and
     // verify whether the newsletter email was sent to the confirmed subscriber.
@@ -204,7 +214,9 @@ async fn newsletter_creation_is_idempotent() {
 
     // Act 2 - Follow redirect
     let html_page = app.get_publish_newsletter_html().await;
-    assert!(html_page.contains("<p><i>Newsletter has been successfully published.</i></p>"));
+    assert!(html_page.contains(
+        "<p><i>The newsletter issue has been accepted - emails will go out shortly.</i></p>"
+    ));
 
     // Act 3 - Resubmit the same form
     let response = app.post_publish_newsletter(&newsletter_request_body).await;
@@ -212,7 +224,11 @@ async fn newsletter_creation_is_idempotent() {
 
     // Act 4 - Follow redirect
     let html_page = app.get_publish_newsletter_html().await;
-    assert!(html_page.contains("<p><i>Newsletter has been successfully published.</i></p>"));
+    assert!(html_page.contains(
+        "<p><i>The newsletter issue has been accepted - emails will go out shortly.</i></p>"
+    ));
+
+    app.dispatch_all_pending_emails().await;
 
     // Mock is dropped here and verify whether the newsletter email was sent just once.
 }
@@ -248,6 +264,8 @@ async fn concurrent_form_submission_is_handled_gracefully() {
         response1.text().await.unwrap(),
         response2.text().await.unwrap()
     );
+
+    app.dispatch_all_pending_emails().await;
 
     // Mock is dropped here and verify whether the newsletter email was sent just once.
 }

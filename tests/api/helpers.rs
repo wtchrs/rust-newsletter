@@ -2,6 +2,8 @@ use actix_web::web;
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHasher};
 use newsletter_lib::configuration::{get_configuration, DatabaseSettings};
+use newsletter_lib::email_client::EmailClient;
+use newsletter_lib::issue_delivery_worker::{try_execute_task, ExecutionOutcome};
 use newsletter_lib::startup::Application;
 use newsletter_lib::telemetry::{get_subscriber, init_subscriber};
 use once_cell::sync::Lazy;
@@ -72,6 +74,7 @@ pub struct TestApp {
     pub email_server: MockServer,
     pub test_user: TestUser,
     pub api_client: reqwest::Client,
+    pub email_client: EmailClient,
 }
 
 pub struct ConfirmationLinks {
@@ -80,7 +83,25 @@ pub struct ConfirmationLinks {
 }
 
 impl TestApp {
-    pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
+    pub async fn dispatch_all_pending_emails(&self) {
+        while let ExecutionOutcome::TaskCompleted =
+            try_execute_task(&self.connection_pool, &self.email_client)
+                .await
+                .unwrap()
+        {}
+    }
+
+    pub async fn post_subscriptions(&self, body: &serde_json::Value) -> reqwest::Response {
+        self.api_client
+            .post(&format!("{}/subscriptions", &self.address))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .form(body)
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn post_subscriptions_with_str(&self, body: &'static str) -> reqwest::Response {
         self.api_client
             .post(&format!("{}/subscriptions", &self.address))
             .header("Content-Type", "application/x-www-form-urlencoded")
@@ -240,6 +261,7 @@ pub async fn spawn_app() -> TestApp {
         email_server,
         test_user: user,
         api_client: client,
+        email_client: configurations.email_client.client(),
     }
 }
 
